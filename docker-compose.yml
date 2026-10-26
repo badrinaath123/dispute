@@ -1,0 +1,54 @@
+version: "3.9"
+
+services:
+  mock:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    command: uvicorn mock_server.main:app --host 0.0.0.0 --port 8100 --reload
+    ports:
+      - "8100:8100"
+    volumes:
+      - ./backend:/app
+    restart: unless-stopped
+
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend/data:/app/data
+      - ./backend:/app
+    env_file:
+      - ./backend/.env
+    environment:
+      - DATABASE_URL=sqlite+aiosqlite:///./data/dispute_system.db
+      - FAISS_INDEX_PATH=./data/faiss
+      - MERCHANT_API_URL=http://mock:8100/merchant
+      - ISSUER_API_URL=http://mock:8100/issuer
+      - CARRIER_API_URL=http://mock:8100/carrier
+      - AUTH_API_URL=http://mock:8100/auth-system
+      - NETWORK_API_URL=http://mock:8100/network
+    depends_on:
+      - mock
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  web:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:80"
+    depends_on:
+      - api
+    restart: unless-stopped
+
+volumes:
+  data:
